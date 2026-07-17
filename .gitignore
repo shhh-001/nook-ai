@@ -1,0 +1,30 @@
+# Node
+node_modules/
+.next/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# Build
+dist/
+build/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backend uploads
+backend/temp_uploads/

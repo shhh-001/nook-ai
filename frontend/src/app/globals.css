@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F5F6F3;
+  --foreground: #2F3A55;
+}
+
+@theme {
+  --color-blueberry: #2F3A55;
+  --color-berry: #5C6B8A;
+  --color-stem: #6E6F73;
+  --color-plate: #F5F6F3;
+  --color-silver: #E7E8E4;
+  --color-puffy: #D3DFF2;
+  --color-clary: #93A4C1;
+  
+  --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbar for premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #E7E8E4;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #93A4C1;
+}
+
+/* Custom styles for Pinterest Masonry column layout */
+.masonry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-gap: 20px;
+  grid-auto-flow: dense;
+}
+
+@media (max-width: 640px) {
+  .masonry-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-gap: 12px;
+  }
+}
+
