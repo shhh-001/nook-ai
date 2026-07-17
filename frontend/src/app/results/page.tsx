@@ -144,4 +144,17 @@ function ResultsContent() {
       />
     </main>
   );
+  
+}
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
+        <Loader2 className="w-7 h-7 text-blueberry animate-spin" />
+        <span className="text-xs text-stem font-semibold italic">Browsing Collections...</span>
+      </div>
+    }>
+      <ResultsContent />
+    </Suspense>
+  );
 }
