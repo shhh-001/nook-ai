@@ -1,7 +1,7 @@
 "use client";
-export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { FolderHeart, SlidersHorizontal, Loader2, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,7 +9,7 @@ import { api, Collection, Item } from "@/lib/api";
 import ItemCard from "@/components/ItemCard";
 import ItemDetailsModal from "@/components/ItemDetailsModal";
 
-export default function ResultsPage() {
+function ResultsContent() {
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category") || "All";
 
