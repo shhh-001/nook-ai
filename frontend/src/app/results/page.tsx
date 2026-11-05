@@ -9,7 +9,10 @@ import { api, Collection, Item } from "@/lib/api";
 import ItemCard from "@/components/ItemCard";
 import ItemDetailsModal from "@/components/ItemDetailsModal";
 
+import { useAuth } from "@/hooks/useAuth";
+
 function ResultsContent() {
+  const { user, isLoading: authLoading } = useAuth(true);
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category") || "All";
 
@@ -57,6 +60,15 @@ function ResultsContent() {
   const filteredItems = activeCategory === "All" 
     ? items
     : items.filter(item => item.category.toLowerCase() === activeCategory.toLowerCase());
+
+  if (authLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[80vh] gap-3">
+        <Loader2 className="w-8 h-8 text-blueberry animate-spin" />
+        <span className="text-xs text-stem font-semibold italic">Opening Vault...</span>
+      </div>
+    );
+  }
 
   return (
     <main className="flex-grow px-4 md:px-8 py-8 max-w-4xl mx-auto space-y-6 w-full pb-32">

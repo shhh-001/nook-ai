@@ -6,6 +6,7 @@ import { Upload, Image as ImageIcon, FileText, Clipboard, X, CheckCircle2, Alert
 import { motion, AnimatePresence } from "framer-motion";
 import { api, Item } from "@/lib/api";
 import confetti from "canvas-confetti";
+import { useAuth } from "@/hooks/useAuth";
 
 interface PreviewFile {
   id: string;
@@ -15,6 +16,7 @@ interface PreviewFile {
 
 export default function UploadPage() {
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth(true);
   const [previews, setPreviews] = useState<PreviewFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [statusText, setStatusText] = useState("");
@@ -23,6 +25,7 @@ export default function UploadPage() {
   // Animation States: 'idle' | 'analyzing' | 'clustering' | 'connecting' | 'splitting' | 'done'
   const [animState, setAnimState] = useState<"idle" | "analyzing" | "clustering" | "connecting" | "splitting" | "done">("idle");
   const [finalItems, setFinalItems] = useState<Item[]>([]);
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -184,6 +187,15 @@ export default function UploadPage() {
       previews.forEach(p => URL.revokeObjectURL(p.previewUrl));
     };
   }, []);
+
+  if (authLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[80vh] gap-3">
+        <Loader2 className="w-8 h-8 text-blueberry animate-spin" />
+        <span className="text-xs text-stem font-semibold italic">Opening Vault...</span>
+      </div>
+    );
+  }
 
   return (
     <main className="flex-grow px-4 md:px-8 py-8 max-w-4xl mx-auto space-y-8 w-full relative min-h-screen pb-32">

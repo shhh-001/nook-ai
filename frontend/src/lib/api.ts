@@ -211,6 +211,22 @@ syncMockCollections();
 // API CLIENT IMPLEMENTATION
 // -------------------------------------------------------------
 
+import { supabase } from "./supabaseClient";
+
+async function getAuthHeaders(): Promise<HeadersInit> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return {
+        "Authorization": `Bearer ${session.access_token}`
+      };
+    }
+  } catch (e) {
+    console.warn("Error getting session for auth headers:", e);
+  }
+  return {};
+}
+
 export const api = {
   // Upload screenshot files
   async uploadScreenshots(files: File[]): Promise<{ temp_tokens: string[]; filenames: string[] }> {
@@ -218,8 +234,10 @@ export const api = {
     files.forEach(file => formData.append("files", file));
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`${API_BASE}/upload`, {
         method: "POST",
+        headers: headers, // Pass auth header for token verification
         body: formData,
       });
       if (!res.ok) throw new Error("Upload failed");
@@ -238,9 +256,13 @@ export const api = {
   // Analyze screenshots
   async analyzeScreenshots(tempTokens: string[]): Promise<Item[]> {
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`${API_BASE}/analyze`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...authHeaders 
+        },
         body: JSON.stringify({ temp_tokens: tempTokens }),
       });
       if (!res.ok) throw new Error("Analysis failed");
@@ -251,7 +273,6 @@ export const api = {
       
       const addedItems: Item[] = [];
       tempTokens.forEach((token) => {
-        // Randomly simulate parsing an item
         const rand = Math.random();
         let itemTemplate: Partial<Item> = {};
         
@@ -335,7 +356,6 @@ export const api = {
           created_at: new Date().toISOString()
         };
 
-        // Duplicate intelligence: Merge if same title already exists
         const duplicateIndex = MOCK_ITEMS.findIndex(item => item.title.toLowerCase() === newItem.title.toLowerCase());
         if (duplicateIndex !== -1) {
           MOCK_ITEMS[duplicateIndex].recommendations_count += 1;
@@ -355,26 +375,34 @@ export const api = {
 
   // Get collections with nested items
   async getCollections(): Promise<Collection[]> {
-    return await fetchWithFallback<Collection[]>(
-      `${API_BASE}/collections`,
-      undefined,
-      (syncMockCollections(), MOCK_COLLECTIONS)
-    );
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/collections`, {
+        headers: authHeaders
+      });
+      if (!res.ok) throw new Error("Collections fetch failed");
+      return await res.json();
+    } catch (e) {
+      console.warn("Collections API failed, falling back to mock data.", e);
+      syncMockCollections();
+      return MOCK_COLLECTIONS;
+    }
   },
 
   // Natural Language Search / Ask Nook
   async askNook(query: string): Promise<AskResponse> {
     try {
-      const res = await fetch(`${API_BASE}/search?query=${encodeURIComponent(query)}`);
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/search?query=${encodeURIComponent(query)}`, {
+        headers: authHeaders
+      });
       if (!res.ok) throw new Error("Search failed");
       return await res.json();
     } catch (e) {
       console.warn("Search API failed, parsing query client-side.", e);
-      // Basic client-side search simulation
       const q = query.toLowerCase();
       let matched = MOCK_ITEMS;
 
-      // Filter by category
       if (q.includes("movie") || q.includes("film")) {
         matched = matched.filter(i => i.category === "Movies");
       } else if (q.includes("sneaker") || q.includes("shoe") || q.includes("product")) {
@@ -387,14 +415,12 @@ export const api = {
         matched = matched.filter(i => i.category === "Travel");
       }
 
-      // Filter by price Max (e.g. "under 1000")
       const priceMatch = q.match(/under\s*(\d+)/);
       if (priceMatch) {
         const maxPrice = parseFloat(priceMatch[1]);
         matched = matched.filter(i => i.price !== undefined && i.price <= maxPrice);
       }
 
-      // Filter by keywords
       const keywords = q.split(" ").filter(w => w.length > 3 && !["show", "find", "what", "which", "saved", "under", "recommended"].includes(w));
       if (keywords.length > 0) {
         matched = matched.filter(item => {
@@ -429,44 +455,50 @@ export const api = {
 
   // Get Profile + Insights
   async getProfile(): Promise<ProfileResponse> {
-    const fallbackProfile: ProfileResponse = {
-      name: "Aayisha Kazi",
-      handle: "@heylkazi",
-      avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-      stats: {
-        Saved: MOCK_ITEMS.length,
-        Collections: MOCK_COLLECTIONS.length,
-        Following: 89
-      },
-      insights: {
-        saved_this_month: 68,
-        top_category: "Skincare",
-        favorite_brand: "Nike",
-        recurring_theme: "Minimalism",
-        monthly_trend: [
-          { month: "Feb", count: 20 },
-          { month: "Mar", count: 35 },
-          { month: "Apr", count: 48 },
-          { month: "May", count: 52 },
-          { month: "Jun", count: 61 },
-          { month: "Jul", count: MOCK_ITEMS.length + 10 }
-        ],
-        summary: `You saved ${MOCK_ITEMS.filter(i => i.category === "Products").length + 35} Products, ${MOCK_ITEMS.filter(i => i.category === "Movies").length + 10} Movies, and ${MOCK_ITEMS.filter(i => i.category === "Recipes").length + 12} Recipes this month. Your gallery focuses highly on Japanese Minimalism and Skincare routines.`
-      }
-    };
-
-    return await fetchWithFallback<ProfileResponse>(
-      `${API_BASE}/profile`,
-      undefined,
-      fallbackProfile
-    );
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/profile`, {
+        headers: authHeaders
+      });
+      if (!res.ok) throw new Error("Profile fetch failed");
+      return await res.json();
+    } catch (e) {
+      console.warn("Profile API failed, falling back to mock.", e);
+      return {
+        name: "Aayisha Kazi",
+        handle: "@heylkazi",
+        avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+        stats: {
+          Saved: MOCK_ITEMS.length,
+          Collections: MOCK_COLLECTIONS.length,
+          Following: 89
+        },
+        insights: {
+          saved_this_month: 68,
+          top_category: "Skincare",
+          favorite_brand: "Nike",
+          recurring_theme: "Minimalism",
+          monthly_trend: [
+            { month: "Feb", count: 20 },
+            { month: "Mar", count: 35 },
+            { month: "Apr", count: 48 },
+            { month: "May", count: 52 },
+            { month: "Jun", count: 61 },
+            { month: "Jul", count: MOCK_ITEMS.length + 10 }
+          ],
+          summary: `You saved ${MOCK_ITEMS.filter(i => i.category === "Products").length + 35} Products, ${MOCK_ITEMS.filter(i => i.category === "Movies").length + 10} Movies, and ${MOCK_ITEMS.filter(i => i.category === "Recipes").length + 12} Recipes this month. Your gallery focuses highly on Japanese Minimalism and Skincare routines.`
+        }
+      };
+    }
   },
 
-  // Delete an item
+  // Delete an item permanently
   async deleteItem(id: string): Promise<boolean> {
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`${API_BASE}/item/${id}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers: authHeaders,
       });
       return res.ok;
     } catch (e) {
@@ -475,5 +507,43 @@ export const api = {
       syncMockCollections();
       return true;
     }
-  }
+  },
+
+  // Archive an item (move to archive)
+  async archiveItem(id: string): Promise<boolean> {
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/item/${id}/archive`, {
+        method: "PATCH",
+        headers: authHeaders,
+      });
+      if (res.ok) {
+        // Remove from local mock immediately
+        MOCK_ITEMS = MOCK_ITEMS.filter(item => item.id !== id);
+        syncMockCollections();
+      }
+      return res.ok;
+    } catch (e) {
+      console.warn("Archive API failed.", e);
+      MOCK_ITEMS = MOCK_ITEMS.filter(item => item.id !== id);
+      syncMockCollections();
+      return true;
+    }
+  },
+
+  // Restore an archived item
+  async restoreItem(id: string): Promise<boolean> {
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/item/${id}/restore`, {
+        method: "PATCH",
+        headers: authHeaders,
+      });
+      return res.ok;
+    } catch (e) {
+      console.warn("Restore API failed.", e);
+      return false;
+    }
+  },
 };
+

@@ -7,13 +7,16 @@ import { api, Collection, Item } from "@/lib/api";
 import AskNook from "@/components/AskNook";
 import ItemCard from "@/components/ItemCard";
 import ItemDetailsModal from "@/components/ItemDetailsModal";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function HomePage() {
+  const { user, isLoading: authLoading } = useAuth(true);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [filteredItems, setFilteredItems] = useState<Item[] | null>(null);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
 
   // Time-based greeting
   const getGreeting = () => {
@@ -80,6 +83,15 @@ export default function HomePage() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[80vh] gap-3">
+        <Loader2 className="w-8 h-8 text-blueberry animate-spin" />
+        <span className="text-xs text-stem font-semibold italic">Opening Vault...</span>
+      </div>
+    );
+  }
+
   return (
     <main className="flex-grow px-4 md:px-8 py-8 max-w-4xl mx-auto space-y-8 w-full">
       {/* Top Welcome Bar */}
@@ -93,7 +105,7 @@ export default function HomePage() {
             Your Second Brain
           </span>
           <h2 className="text-xl md:text-2xl font-bold text-blueberry flex items-center gap-1.5 leading-tight tracking-tight">
-            <span>{getGreeting()}, Aayisha</span>
+            <span>{getGreeting()}, {user?.email?.split("@")[0]?.split(".")[0]?.replace(/^\w/, c => c.toUpperCase()) || "there"}</span>
             <span className="animate-pulse">✨</span>
           </h2>
         </motion.div>

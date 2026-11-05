@@ -7,7 +7,7 @@ from datetime import datetime
 class SourceScreenshot(BaseModel):
     id: str
     item_id: str
-    image_url: str
+    image_url: Optional[str] = None
     extracted_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Item(BaseModel):
@@ -24,11 +24,13 @@ class Item(BaseModel):
     ingredients: Optional[List[str]] = None
     tags: List[str] = Field(default_factory=list)
     ocr_text: Optional[str] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)  # Flexible extra metadata (e.g. streaming platforms, buy link)
+    metadata: Dict[str, Any] = Field(default_factory=dict)  # Flexible extra metadata
     image_url: str
     source_screenshots: List[SourceScreenshot] = Field(default_factory=list)
     recommendations_count: int = 1
     creators: List[str] = Field(default_factory=list)
+    is_favorite: bool = False
+    is_archived: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Collection(BaseModel):

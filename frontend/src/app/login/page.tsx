@@ -1,36 +1,128 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Sparkles, Mail, Lock, ShieldCheck, ArrowRight, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Sparkles, Mail, Lock, ShieldCheck, ArrowRight, Loader2, KeyRound } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") || "login";
+  
+  const [isLogin, setIsLogin] = useState(initialTab === "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+
+  // Check if session already exists
+  useEffect(() => {
+    const checkSession = async () => {
+      if (!isSupabaseConfigured) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push("/home");
+      }
+    };
+    checkSession();
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
     setIsLoading(true);
-    
-    // Simulate Supabase authentication delay
-    setTimeout(() => {
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    if (!isSupabaseConfigured) {
+      // Graceful local development warning if env is missing
+      setErrorMsg("Supabase is not configured. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your .env.local file.");
       setIsLoading(false);
-      router.push("/home");
-    }, 1500);
+      return;
+    }
+
+    try {
+      if (isLogin) {
+        // Real Supabase Login
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        
+        setSuccessMsg("Logged in successfully!");
+        setTimeout(() => {
+          router.push("/home");
+        }, 800);
+      } else {
+        // Real Supabase Sign Up
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        
+        if (data.session) {
+          setSuccessMsg("Account created and logged in successfully!");
+          setTimeout(() => {
+            router.push("/home");
+          }, 1000);
+        } else {
+          setSuccessMsg("Sign-up successful! Please check your email for a verification link.");
+        }
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "An authentication error occurred.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
+    setErrorMsg("");
+    if (!isSupabaseConfigured) {
+      setErrorMsg("Supabase is not configured.");
+      return;
+    }
+    
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/home`
+        }
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      setErrorMsg(err.message || "OAuth login failed");
       setIsLoading(false);
-      router.push("/home");
-    }, 1200);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setErrorMsg("Please enter your email address first.");
+      return;
+    }
+    setIsLoading(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login?tab=reset`
+      });
+      if (error) throw error;
+      setSuccessMsg("Password reset email sent! Check your inbox.");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error sending password reset.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -54,7 +146,7 @@ export default function LoginPage() {
         {/* Toggles */}
         <div className="flex bg-plate rounded-full p-1 border border-silver/50">
           <button
-            onClick={() => setIsLogin(true)}
+            onClick={() => { setIsLogin(true); setErrorMsg(""); setSuccessMsg(""); }}
             className={`flex-1 text-center py-2 rounded-full text-xs font-bold transition-all duration-300 ${
               isLogin ? "bg-white text-blueberry shadow-sm" : "text-stem"
             }`}
@@ -62,7 +154,7 @@ export default function LoginPage() {
             Sign In
           </button>
           <button
-            onClick={() => setIsLogin(false)}
+            onClick={() => { setIsLogin(false); setErrorMsg(""); setSuccessMsg(""); }}
             className={`flex-1 text-center py-2 rounded-full text-xs font-bold transition-all duration-300 ${
               !isLogin ? "bg-white text-blueberry shadow-sm" : "text-stem"
             }`}
@@ -70,6 +162,30 @@ export default function LoginPage() {
             Create Account
           </button>
         </div>
+
+        {/* Success/Error Alerts */}
+        <AnimatePresence mode="wait">
+          {errorMsg && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-red-50 text-red-600 p-3 rounded-2xl text-[11px] font-medium leading-relaxed border border-red-100"
+            >
+              {errorMsg}
+            </motion.div>
+          )}
+          {successMsg && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-green-50 text-green-700 p-3 rounded-2xl text-[11px] font-medium leading-relaxed border border-green-100"
+            >
+              {successMsg}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Form Content */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -98,6 +214,7 @@ export default function LoginPage() {
               {isLogin && (
                 <button
                   type="button"
+                  onClick={handleForgotPassword}
                   className="text-[10px] font-semibold text-berry hover:text-blueberry cursor-pointer"
                 >
                   Forgot Password?

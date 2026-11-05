@@ -10,8 +10,19 @@ interface ItemCardProps {
   onOpenDetails: (item: Item) => void;
 }
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function ItemCard({ item, onOpenDetails }: ItemCardProps) {
   // Determine card height variance based on ID hash to give a stable Pinterest masonry feel
+  console.log("CARD ITEM:", item);
+  
+  const imageUrl = item.image_url?.startsWith("http")
+    ? item.image_url
+    : item.image_url
+      ? `${API_BASE_URL}${item.image_url}`
+      : "";
+
   const getCardHeightClass = (id: string) => {
     const hash = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const mod = hash % 3;
@@ -30,11 +41,11 @@ export default function ItemCard({ item, onOpenDetails }: ItemCardProps) {
       {/* Item Image with custom height */}
       <div className={`relative w-full overflow-hidden bg-silver/20 ${getCardHeightClass(item.id)}`}>
         <img
-          src={item.image_url}
-          alt={item.title}
-          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-          loading="lazy"
-        />
+        src={imageUrl}    
+        alt={item.title}
+        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+        loading="lazy"
+      />
         
         {/* Category Indicator Tag */}
         <div className="absolute top-3 left-3 bg-white/80 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-medium text-blueberry/80 tracking-wide border border-white/50">
@@ -64,11 +75,12 @@ export default function ItemCard({ item, onOpenDetails }: ItemCardProps) {
             </h4>
           </div>
           
-          {item.price !== undefined && (
+         {item.price != null ? (
             <span className="text-xs font-semibold text-blueberry bg-puffy/40 px-2 py-0.5 rounded-md whitespace-nowrap">
-              {item.currency === "INR" ? "₹" : "$"}{item.price.toLocaleString()}
-            </span>
-          )}
+              {item.currency === "INR" ? "₹" : "$"}
+              {item.price.toLocaleString()}
+          </span>
+          ) : null}
         </div>
 
         {/* Short Description */}

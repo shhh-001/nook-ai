@@ -1,10 +1,24 @@
 import os
 import random
+import json
+
+from groq import Groq
+import pytesseract
+from PIL import Image
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+
+from dotenv import load_dotenv
+from google import genai
+from PIL import Image
+
 from ..models.schemas import Item, SourceScreenshot
 
+load_dotenv()
 # Pluggable Provider Interfaces
 
 class OCRProvider(ABC):
@@ -25,28 +39,23 @@ class EmbeddingProvider(ABC):
 
 # Mock Implementations for Development
 
-class MockOCRProvider(OCRProvider):
+class RealOCRProvider(OCRProvider):
+
     def extract_text(self, file_path: str) -> str:
-        filename = os.path.basename(file_path).lower()
-        if "nike" in filename or "shoe" in filename or "sneaker" in filename:
-            return "NIKE AIR FORCE 1 '07 White - Price Rs 8,405 - Premium Leather - Nike India Store"
-        elif "interstellar" in filename or "movie" in filename or "astronaut" in filename:
-            return "INTERSTELLAR - Directed by Christopher Nolan - IMDb 8.7/10 - Warner Bros Pictures - Streaming on Netflix & Prime"
-        elif "ordinary" in filename or "skincare" in filename or "serum" in filename:
-            return "The Ordinary Niacinamide 10% + Zinc 1% - High-Strength Vitamin and Mineral Blemish Formula - Deciem"
-        elif "pasta" in filename or "recipe" in filename or "chicken" in filename or "cook" in filename:
-            return "Creamy Tuscan Garlic Chicken - Prep Time 10m - Cook Time 20m - Ingredients: Chicken breast, heavy cream, spinach, sun-dried tomatoes"
-        elif "bali" in filename or "travel" in filename or "cafe" in filename:
-            return "Pennylane Cafe Bali - Canggu, Bali, Indonesia - Mediterranean aesthetic restaurant and travel destination"
-        elif "bedroom" in filename or "decor" in filename or "interior" in filename:
-            return "Minimalist Bedroom Idea - Warm lighting, oak bed frame, beige linen, plants - Home decor inspiration"
-        elif "chair" in filename or "furniture" in filename:
-            return "Mid-Century Modern Womb Chair - Knoll - Premium boucle fabric wool - Living room furniture"
-        else:
-            # Fallback mock text based on random choice
-            categories = ["skincare", "sneakers", "recipe", "movie", "furniture"]
-            selected = random.choice(categories)
-            return f"Mock OCR Text for {selected} upload: {filename} containing rich metadata and prices."
+        try:
+            image = Image.open(file_path)
+
+            text = pytesseract.image_to_string(image)
+
+            print("\n===== OCR TEXT =====")
+            print(text[:1000])
+            print("====================\n")
+
+            return text
+
+        except Exception as e:
+            print("OCR ERROR:", str(e))
+            return ""
 
 class MockVisionProvider(VisionProvider):
     def analyze_image(self, file_path: str, ocr_text: str) -> Dict[str, Any]:
@@ -234,6 +243,95 @@ class MockVisionProvider(VisionProvider):
                     "creator": "bookish_nook"
                 }
 
+class GroqVisionProvider(VisionProvider):
+
+    def __init__(self):
+        self.client = Groq(
+            api_key=os.getenv("GROQ_API_KEY")
+        )
+
+    def analyze_image(self, file_path: str, ocr_text: str):
+
+        print("🔥 GROQ PROVIDER CALLED")
+
+        prompt = f"""
+You are an AI screenshot organizer.
+
+Analyze the OCR text below and return ONLY valid JSON.
+
+OCR TEXT:
+{ocr_text}
+
+Return JSON in this exact format:
+
+{{
+  "category": "",
+  "title": "",
+  "subtitle": "",
+  "description": "",
+  "price": null,
+  "currency": "INR",
+  "tags": [],
+  "metadata": {{}},
+  "image_url": "",
+  "creator": "unknown"
+}}
+
+Possible categories:
+Products
+Movies
+Anime
+Books
+Recipes
+Travel
+Ideas
+Fashion
+Technology
+Skincare
+Furniture
+Other
+"""
+
+        try:
+
+            response = self.client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.2
+            )
+
+            text = response.choices[0].message.content.strip()
+
+            print("===== GROQ RESPONSE =====")
+            print(text)
+            print("=========================")
+
+            text = text.strip()
+
+            if text.startswith("```"):
+                text = text.replace("```json", "")
+                text = text.replace("```", "")
+                text = text.strip()
+
+            print("===== CLEANED JSON =====")
+            print(text)
+            print("========================")
+
+            return json.loads(text)
+
+        except Exception as e:
+
+            print("===== GROQ ERROR =====")
+            print(str(e))
+            print("======================")
+
+            raise
+    
 class MockEmbeddingProvider(EmbeddingProvider):
     def get_embedding(self, text: str) -> List[float]:
         # Return a dummy 128-dimensional embedding array
@@ -255,7 +353,9 @@ class AIPipelineEngine:
 
         # 2. Vision Model Analysis (extract metadata and category)
         analysis = self.vision.analyze_image(file_path, ocr_text)
-
+        print("===== FINAL ANALYSIS =====")
+        print(analysis)
+        print("==========================")
         # 3. Generate Semantic Embeddings (placeholder for pgvector/semantic search)
         embedding = self.embedder.get_embedding(ocr_text + " " + analysis["title"] + " " + " ".join(analysis["tags"]))
 
@@ -280,8 +380,8 @@ class AIPipelineEngine:
 
 
 # Global pipeline instance (default to Mock, can be switched to real via environment variables)
-ocr_provider = MockOCRProvider()
-vision_provider = MockVisionProvider()
+ocr_provider = RealOCRProvider()
+vision_provider = GroqVisionProvider()
 embedding_provider = MockEmbeddingProvider()
 
 ai_pipeline = AIPipelineEngine(ocr_provider, vision_provider, embedding_provider)

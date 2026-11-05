@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, ExternalLink, Calendar, Users, Eye, Trash2, Heart, CheckSquare, Square, Film, Award, Clock } from "lucide-react";
+import { X, ExternalLink, Calendar, Users, Eye, Trash2, Heart, CheckSquare, Square, Film, Award, Clock, Archive, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Item, api } from "@/lib/api";
 
@@ -11,10 +11,14 @@ interface ItemDetailsModalProps {
   onDeleted?: (id: string) => void;
 }
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function ItemDetailsModal({ item, onClose, onDeleted }: ItemDetailsModalProps) {
   const [showOcr, setShowOcr] = useState(false);
   const [checkedIngredients, setCheckedIngredients] = useState<Record<string, boolean>>({});
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   if (!item) return null;
 
@@ -26,7 +30,7 @@ export default function ItemDetailsModal({ item, onClose, onDeleted }: ItemDetai
   };
 
   const handleDelete = async () => {
-    if (confirm("Are you sure you want to remove this item from your Second Brain?")) {
+    if (confirm("Permanently delete this item? This cannot be undone.")) {
       setIsDeleting(true);
       const success = await api.deleteItem(item.id);
       if (success) {
@@ -34,6 +38,18 @@ export default function ItemDetailsModal({ item, onClose, onDeleted }: ItemDetai
         onClose();
       }
       setIsDeleting(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    if (confirm("Move this item to Archive? You can restore it later.")) {
+      setIsArchiving(true);
+      const success = await api.archiveItem(item.id);
+      if (success) {
+        if (onDeleted) onDeleted(item.id);
+        onClose();
+      }
+      setIsArchiving(false);
     }
   };
 
@@ -68,10 +84,14 @@ export default function ItemDetailsModal({ item, onClose, onDeleted }: ItemDetai
           {/* Left Side: Product Image & Source Screenshots */}
           <div className="w-full md:w-[45%] bg-silver/10 flex flex-col relative border-r border-silver/30 min-h-[300px] md:min-h-0">
             <img
-              src={item.image_url}
-              alt={item.title}
-              className="w-full h-full object-cover flex-grow max-h-[40vh] md:max-h-none"
-            />
+              src={
+                item.image_url?.startsWith("http")
+                  ? item.image_url
+                  : `${API_BASE_URL}${item.image_url}`
+             }
+            alt={item.title}
+            className="w-full h-full object-cover flex-grow max-h-[40vh] md:max-h-none"
+          />
             
             {/* Source Screenshots Section */}
             {item.source_screenshots && item.source_screenshots.length > 0 && (
@@ -86,7 +106,14 @@ export default function ItemDetailsModal({ item, onClose, onDeleted }: ItemDetai
                       className="w-12 h-16 bg-silver/40 rounded-lg overflow-hidden border border-silver/50 shrink-0 relative group"
                     >
                       {ss.image_url ? (
-                        <img src={ss.image_url} className="w-full h-full object-cover" />
+                        <img
+                          src={
+                            ss.image_url?.startsWith("http")
+                              ? ss.image_url
+                            : `${API_BASE_URL}${ss.image_url}`
+                          }
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <div className="w-full h-full bg-blueberry/10 flex items-center justify-center text-[10px] text-blueberry/60 font-semibold">
                           #{idx + 1}
@@ -258,17 +285,26 @@ export default function ItemDetailsModal({ item, onClose, onDeleted }: ItemDetai
               </div>
             </div>
 
-            {/* Bottom Actions: Save, Delete, Close */}
+            {/* Bottom Actions: Archive, Delete, Close */}
             <div className="flex items-center justify-between border-t border-silver/40 pt-6 mt-8">
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="text-red-500 hover:text-red-600 flex items-center gap-1 text-xs font-bold disabled:opacity-40 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Delete</span>
-              </button>
-              
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleArchive}
+                  disabled={isArchiving || isDeleting}
+                  className="text-stem hover:text-blueberry flex items-center gap-1 text-xs font-bold disabled:opacity-40 cursor-pointer"
+                >
+                  {isArchiving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                  <span>Archive</span>
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting || isArchiving}
+                  className="text-red-500 hover:text-red-600 flex items-center gap-1 text-xs font-bold disabled:opacity-40 cursor-pointer"
+                >
+                  {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  <span>Delete</span>
+                </button>
+              </div>
               <button
                 onClick={onClose}
                 className="bg-silver text-blueberry px-5 py-2 rounded-full text-xs font-bold hover:bg-silver/80 cursor-pointer transition-colors duration-200"

@@ -1,16 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, Shield, Share2, FolderHeart, Archive, Download, Settings, FileSpreadsheet, FileText, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  FolderHeart, Archive, Settings, FileSpreadsheet, FileText,
+  Download, ChevronRight, Loader2, Sparkles, LogOut, User
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { api, ProfileResponse } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function ProfilePage() {
+  const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth(true);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return; // wait for auth before fetching profile
     const loadProfile = async () => {
       try {
         const data = await api.getProfile();
@@ -22,45 +32,56 @@ export default function ProfilePage() {
       }
     };
     loadProfile();
-  }, []);
+  }, [authLoading]);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await supabase.auth.signOut();
+      router.push("/login");
+    } catch (e) {
+      console.error("Logout error:", e);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   // Functional CSV Export
   const handleExportCSV = async () => {
     if (!profile) return;
     setIsExporting("csv");
-    
-    // Simulate minor delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
+    await new Promise(resolve => setTimeout(resolve, 500));
     try {
-      // Fetch fresh collections to extract items
       const collections = await api.getCollections();
       const allItems = collections.flatMap(c => c.items);
-      
-      let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += "ID,Category,Title,Subtitle,Price,Currency,Created At,Tags\n";
-      
+
+      let csv = "ID,Category,Title,Subtitle,Description,Price,Currency,Tags,OCR Text,Image URL,Created At\n";
       allItems.forEach(item => {
         const row = [
           item.id,
           `"${item.category}"`,
           `"${item.title.replace(/"/g, '""')}"`,
           `"${(item.subtitle || "").replace(/"/g, '""')}"`,
+          `"${(item.description || "").replace(/"/g, '""')}"`,
           item.price || "",
           item.currency || "",
+          `"${item.tags.join(", ")}"`,
+          `"${(item.ocr_text || "").replace(/"/g, '""')}"`,
+          `"${item.image_url}"`,
           item.created_at,
-          `"${item.tags.join(", ")}"`
         ].join(",");
-        csvContent += row + "\n";
+        csv += row + "\n";
       });
 
-      const encodedUri = encodeURI(csvContent);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "nook_ai_screenshots_export.csv");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "nook_ai_export.csv");
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
     } finally {
@@ -72,33 +93,27 @@ export default function ProfilePage() {
   const handleExportMarkdown = async () => {
     if (!profile) return;
     setIsExporting("md");
-    
-    // Simulate minor delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
+    await new Promise(resolve => setTimeout(resolve, 500));
     try {
       const collections = await api.getCollections();
-      
-      let md = `# Nook AI - Screenshot Brain Export\n`;
-      md += `Generated on ${new Date().toLocaleDateString()} for ${profile.name} (${profile.handle})\n\n`;
-      md += `## Profile Insights\n`;
-      md += `- Saved This Month: ${profile.insights.saved_this_month}\n`;
-      md += `- Top Category: ${profile.insights.top_category}\n`;
-      md += `- Favorite Brand: ${profile.insights.favorite_brand}\n`;
-      md += `- Theme: ${profile.insights.recurring_theme}\n\n`;
-      
+      let md = `# Nook AI – Screenshot Brain Export\n`;
+      md += `*Generated ${new Date().toLocaleDateString()} for ${profile.name} (${profile.handle})*\n\n`;
+      md += `## Insights\n`;
+      md += `- **Top Category**: ${profile.insights.top_category}\n`;
+      md += `- **Theme**: ${profile.insights.recurring_theme}\n`;
+      md += `- **Total Saved**: ${profile.stats["Saved"]}\n\n`;
+
       collections.forEach(col => {
-        md += `## Collection: ${col.name} (${col.items_count} items)\n`;
-        md += `${col.description || ""}\n\n`;
-        
+        md += `## ${col.name} (${col.items_count} items)\n\n`;
         col.items.forEach(item => {
           md += `### ${item.title}\n`;
-          if (item.subtitle) md += `*${item.subtitle}*\n`;
+          if (item.subtitle) md += `*${item.subtitle}*\n\n`;
+          if (item.description) md += `> ${item.description}\n\n`;
           md += `- **Category**: ${item.category}\n`;
-          if (item.price) md += `- **Price**: ${item.currency === "INR" ? "₹" : "$"}${item.price}\n`;
-          md += `- **Tags**: ${item.tags.map(t => `\`#${t}\``).join(", ")}\n`;
-          if (item.description) md += `\n> ${item.description}\n`;
-          if (item.ocr_text) md += `\n**Raw OCR extracted:**\n\`\`\`\n${item.ocr_text}\n\`\`\`\n`;
+          if (item.price) md += `- **Price**: ₹${item.price}\n`;
+          if (item.rating) md += `- **Rating**: ${item.rating}/10\n`;
+          md += `- **Tags**: ${item.tags.map(t => `#${t}`).join(" ")}\n`;
+          if (item.ocr_text) md += `\n**OCR Text**:\n\`\`\`\n${item.ocr_text}\n\`\`\`\n`;
           md += `\n---\n\n`;
         });
       });
@@ -119,15 +134,14 @@ export default function ProfilePage() {
     }
   };
 
-  // Simulating PDF Export
   const handleExportPDF = async () => {
     setIsExporting("pdf");
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    window.print(); // Native print allows user to save high quality layouts as PDF easily!
+    await new Promise(resolve => setTimeout(resolve, 800));
+    window.print();
     setIsExporting(null);
   };
 
-  if (isLoading || !profile) {
+  if (authLoading || isLoading || !profile) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[80vh] gap-3">
         <Loader2 className="w-8 h-8 text-blueberry animate-spin" />
@@ -136,38 +150,54 @@ export default function ProfilePage() {
     );
   }
 
-  // Profile links
+  // Profile nav links — no social elements
   const links = [
     { name: "Collections", icon: FolderHeart, href: "/results" },
-    { name: "Liked Items", icon: Share2, href: "#" },
-    { name: "Archive", icon: Archive, href: "#" },
-    { name: "Settings", icon: Settings, href: "#" }
+    { name: "Archive", icon: Archive, href: "/archive" },
+    { name: "Settings", icon: Settings, href: "/settings" },
   ];
+
+  // Get user initial from email
+  const userInitial = (user?.email?.[0] || profile.name[0] || "N").toUpperCase();
 
   return (
     <main className="flex-grow px-4 md:px-8 py-8 max-w-lg mx-auto space-y-8 w-full pb-32">
       {/* Profile Header */}
       <div className="flex flex-col items-center text-center space-y-4 pt-4 relative">
-        <button className="absolute top-0 right-0 bg-white border border-silver/60 p-2.5 rounded-full text-blueberry hover:border-blueberry/30 transition-colors shadow-sm flex items-center justify-center cursor-pointer">
+        {/* Settings shortcut */}
+        <button
+          onClick={() => router.push("/settings")}
+          className="absolute top-0 right-0 bg-white border border-silver/60 p-2.5 rounded-full text-blueberry hover:border-blueberry/30 transition-colors shadow-sm flex items-center justify-center cursor-pointer"
+          title="Settings"
+        >
           <Settings className="w-4 h-4" />
         </button>
 
-        {/* Big Avatar */}
-        <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-silver shadow-md">
-          <img src={profile.avatar_url} alt={profile.name} className="w-full h-full object-cover" />
+        {/* Avatar — initials fallback */}
+        <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-silver shadow-md bg-blueberry flex items-center justify-center">
+          {profile.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt={profile.name}
+              className="w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          ) : (
+            <span className="text-2xl font-bold text-white">{userInitial}</span>
+          )}
         </div>
 
-        {/* Details */}
+        {/* Name / handle from real auth */}
         <div className="space-y-1">
           <h2 className="text-xl font-bold text-blueberry tracking-tight leading-none">
             {profile.name}
           </h2>
           <span className="text-xs font-semibold text-stem">
-            {profile.handle}
+            {user?.email || profile.handle}
           </span>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats — Saved + Collections only (no social) */}
         <div className="flex gap-8 justify-center pt-2">
           {Object.entries(profile.stats).map(([label, val]) => (
             <div key={label} className="text-center">
@@ -178,13 +208,12 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Dark Insights Card (Matches mockup exactly) */}
+      {/* Nook Insights Card */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-blueberry text-plate rounded-[32px] p-6 space-y-5 shadow-xl relative overflow-hidden"
       >
-        {/* Glowing Background Sparkle */}
         <div className="absolute -right-4 -bottom-4 opacity-15 text-white scale-[2.5]">
           <Sparkles className="w-20 h-20 fill-white" />
         </div>
@@ -201,15 +230,10 @@ export default function ProfilePage() {
           {profile.insights.summary}
         </p>
 
-        {/* Detailed Points */}
-        <div className="grid grid-cols-3 gap-2 pt-2 text-center border-t border-white/10">
+        <div className="grid grid-cols-2 gap-2 pt-2 text-center border-t border-white/10">
           <div>
             <span className="text-[9px] font-bold text-white/50 uppercase block tracking-wider">Top Category</span>
             <span className="text-xs font-bold text-plate mt-0.5 block">{profile.insights.top_category}</span>
-          </div>
-          <div>
-            <span className="text-[9px] font-bold text-white/50 uppercase block tracking-wider">Favorite Brand</span>
-            <span className="text-xs font-bold text-plate mt-0.5 block">{profile.insights.favorite_brand}</span>
           </div>
           <div>
             <span className="text-[9px] font-bold text-white/50 uppercase block tracking-wider">Theme</span>
@@ -217,46 +241,34 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* SVG Monthly Trend Graph */}
+        {/* Animated Trend Graph */}
         <div className="pt-2">
-          <span className="text-[9px] font-bold text-white/50 uppercase block tracking-wider mb-2">Screenshot Upload Trend</span>
+          <span className="text-[9px] font-bold text-white/50 uppercase block tracking-wider mb-2">Upload Trend</span>
           <svg className="w-full h-14" viewBox="0 0 300 60">
-            {/* Horizontal Grid lines */}
             <line x1="0" y1="20" x2="300" y2="20" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
             <line x1="0" y1="40" x2="300" y2="40" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-            
-            {/* Animated Trend Line */}
             <motion.path
               d="M 10 50 Q 58 42, 106 35 T 202 20 T 290 10"
-              fill="none"
-              stroke="#D3DFF2"
-              strokeWidth="2.5"
+              fill="none" stroke="#D3DFF2" strokeWidth="2.5"
               initial={{ pathLength: 0 }}
               animate={{ pathLength: 1 }}
               transition={{ duration: 1.5, ease: "easeInOut" }}
             />
-            
-            {/* Tooltip Dot */}
             <circle cx="290" cy="10" r="3" fill="#D3DFF2" />
           </svg>
           <div className="flex justify-between text-[8px] text-white/40 uppercase font-bold px-1">
-            <span>Feb</span>
-            <span>Mar</span>
-            <span>Apr</span>
-            <span>May</span>
-            <span>Jun</span>
-            <span>Jul</span>
+            {profile.insights.monthly_trend.map(t => <span key={t.month}>{t.month}</span>)}
           </div>
         </div>
       </motion.div>
 
-      {/* Main List Links */}
+      {/* Nav Links */}
       <div className="bg-white border border-silver/50 rounded-[28px] overflow-hidden shadow-sm">
         {links.map((link, idx) => (
           <a
             key={link.name}
             href={link.href}
-            className={`flex items-center justify-between p-4.5 hover:bg-plate/40 transition-colors ${
+            className={`flex items-center justify-between px-5 py-4 hover:bg-plate/40 transition-colors ${
               idx !== links.length - 1 ? "border-b border-silver/30" : ""
             }`}
           >
@@ -273,49 +285,50 @@ export default function ProfilePage() {
       <div className="space-y-3">
         <h3 className="text-xs font-bold text-stem uppercase tracking-widest px-1">Export Screenshot Brain</h3>
         <div className="grid grid-cols-3 gap-2">
-          {/* CSV */}
           <button
             onClick={handleExportCSV}
             disabled={isExporting !== null}
-            className="bg-white border border-silver/50 hover:border-blueberry/30 p-4 rounded-[20px] flex flex-col items-center justify-center text-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-40"
+            className="bg-white border border-silver/50 hover:border-blueberry/30 p-4 rounded-[20px] flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-40"
           >
-            {isExporting === "csv" ? (
-              <Loader2 className="w-5 h-5 text-blueberry animate-spin" />
-            ) : (
-              <FileSpreadsheet className="w-5 h-5 text-green-600" />
-            )}
+            {isExporting === "csv" ? <Loader2 className="w-5 h-5 text-blueberry animate-spin" /> : <FileSpreadsheet className="w-5 h-5 text-green-600" />}
             <span className="text-[10px] font-bold text-blueberry">CSV File</span>
           </button>
-
-          {/* Markdown */}
           <button
             onClick={handleExportMarkdown}
             disabled={isExporting !== null}
-            className="bg-white border border-silver/50 hover:border-blueberry/30 p-4 rounded-[20px] flex flex-col items-center justify-center text-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-40"
+            className="bg-white border border-silver/50 hover:border-blueberry/30 p-4 rounded-[20px] flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-40"
           >
-            {isExporting === "md" ? (
-              <Loader2 className="w-5 h-5 text-blueberry animate-spin" />
-            ) : (
-              <FileText className="w-5 h-5 text-blue-500" />
-            )}
+            {isExporting === "md" ? <Loader2 className="w-5 h-5 text-blueberry animate-spin" /> : <FileText className="w-5 h-5 text-blue-500" />}
             <span className="text-[10px] font-bold text-blueberry">Markdown</span>
           </button>
-
-          {/* PDF */}
           <button
             onClick={handleExportPDF}
             disabled={isExporting !== null}
-            className="bg-white border border-silver/50 hover:border-blueberry/30 p-4 rounded-[20px] flex flex-col items-center justify-center text-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-40"
+            className="bg-white border border-silver/50 hover:border-blueberry/30 p-4 rounded-[20px] flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-40"
           >
-            {isExporting === "pdf" ? (
-              <Loader2 className="w-5 h-5 text-blueberry animate-spin" />
-            ) : (
-              <Download className="w-5 h-5 text-blueberry" />
-            )}
-            <span className="text-[10px] font-bold text-blueberry">PDF Document</span>
+            {isExporting === "pdf" ? <Loader2 className="w-5 h-5 text-blueberry animate-spin" /> : <Download className="w-5 h-5 text-blueberry" />}
+            <span className="text-[10px] font-bold text-blueberry">PDF</span>
           </button>
         </div>
       </div>
+
+      {/* Logout Button */}
+      <motion.button
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
+        onClick={handleLogout}
+        disabled={isLoggingOut}
+        className="w-full border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition-colors duration-200 disabled:opacity-50"
+      >
+        {isLoggingOut ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <>
+            <LogOut className="w-4 h-4" />
+            <span className="text-sm">Sign Out</span>
+          </>
+        )}
+      </motion.button>
     </main>
   );
 }

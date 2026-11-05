@@ -5,6 +5,12 @@
   --foreground: #2F3A55;
 }
 
+/* ─── Dark Mode Variables ──────────────────────────────────── */
+.dark {
+  --background: #1A1F2E;
+  --foreground: #D3DFF2;
+}
+
 @theme {
   --color-blueberry: #2F3A55;
   --color-berry: #5C6B8A;
@@ -22,9 +28,43 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Custom Scrollbar for premium feel */
+/* ─── Dark Mode Overrides ──────────────────────────────────── */
+.dark body,
+.dark {
+  background-color: #1A1F2E;
+  color: #D3DFF2;
+}
+
+.dark .bg-white {
+  background-color: #232A3C !important;
+}
+
+.dark .bg-plate {
+  background-color: #1E2436 !important;
+}
+
+.dark .border-silver\/50,
+.dark .border-silver\/60,
+.dark .border-silver\/30 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .text-blueberry {
+  color: #D3DFF2 !important;
+}
+
+.dark .text-stem {
+  color: #8A97B0 !important;
+}
+
+.dark .shadow-sm {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ─── Custom Scrollbar ─────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -40,7 +80,7 @@ body {
   background: #93A4C1;
 }
 
-/* Custom styles for Pinterest Masonry column layout */
+/* ─── Pinterest Masonry Grid ───────────────────────────────── */
 .masonry-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -55,3 +95,11 @@ body {
   }
 }
 
+/* ─── Hide scrollbar utility ───────────────────────────────── */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
